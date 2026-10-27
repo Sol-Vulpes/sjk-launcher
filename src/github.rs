@@ -17,6 +17,9 @@ pub struct Release {
     pub published_at: Option<String>,
     #[serde(default)]
     pub html_url: String,
+    /// The release notes, in Markdown.
+    #[serde(default)]
+    pub body: Option<String>,
     #[serde(default)]
     pub assets: Vec<Asset>,
 }
@@ -35,6 +38,21 @@ impl Release {
     /// `2026-10-27` from `2026-10-27T00:23:56Z`.
     pub fn date(&self) -> &str {
         self.published_at.as_deref().map_or("", |at| at.get(..10).unwrap_or(at))
+    }
+
+    /// The first changes the notes list (`* Change by @someone in <link>`), plain.
+    pub fn highlights(&self, most: usize) -> Vec<String> {
+        let body = self.body.as_deref().unwrap_or_default();
+        body.lines()
+            .filter_map(|line| line.trim().strip_prefix("* ").or_else(|| line.trim().strip_prefix("- ")))
+            .map(|line| {
+                let line = line.split(" by @").next().unwrap_or(line);
+                let line = line.split(" in https://").next().unwrap_or(line);
+                line.trim().trim_end_matches('.').to_owned()
+            })
+            .filter(|line| !line.is_empty() && !line.starts_with("**"))
+            .take(most)
+            .collect()
     }
 
     pub fn asset_for(&self, game: Game) -> Option<&Asset> {

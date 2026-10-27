@@ -12,7 +12,10 @@ mod gamedata;
 mod games;
 mod github;
 mod install;
+mod pk3scan;
+mod scans;
 mod system;
+mod theme;
 
 use eframe::egui;
 use std::sync::Arc;
@@ -35,8 +38,10 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("SJK Launcher")
-            .with_inner_size([980.0, 640.0])
-            .with_min_inner_size([760.0, 480.0])
+            .with_inner_size([1200.0, 760.0])
+            .with_min_inner_size([960.0, 620.0])
+            // The header is the title bar (app::App::header).
+            .with_decorations(false)
             .with_icon(Arc::new(icon))
             .with_visible(!(minimized && cfg!(windows))),
         ..Default::default()

@@ -31,6 +31,8 @@ pub struct Config {
     pub sith_url: String,
     pub sith_groups: String,
     pub sith_files: String,
+    /// MD5s of PK3s the player chose to download although the scan found danger.
+    pub trusted: std::collections::BTreeSet<String>,
 }
 
 pub const SITH_URL: &str = "http://64.177.112.251:8080";
@@ -50,6 +52,7 @@ impl Default for Config {
             sith_url: SITH_URL.into(),
             sith_groups: sjk_jof_content::plan::DEFAULT.into(),
             sith_files: String::new(),
+            trusted: Default::default(),
         }
     }
 }

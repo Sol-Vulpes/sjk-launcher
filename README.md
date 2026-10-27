@@ -24,8 +24,17 @@ the platform config folder (`%APPDATA%\SJK\Launcher\config\launcher.json` on Win
 ## Build
 
 ```
-cargo build --release
+./build.ps1          # Windows: build and pack into dist/
+sh build.sh          # Linux and macOS
 ```
+
+Add `-Test` / `--test` to run the tests first. If Windows refuses to run the script, use
+`powershell -ExecutionPolicy Bypass -File build.ps1`.
+
+To release, set the version in `Cargo.toml`, then push a tag `v<version>` (or use
+*Run workflow* on the Build action and type the version). The action tests and builds on
+all three OSes and publishes a GitHub release with the archives; a version with a `-`,
+like `0.2.0-beta.1`, becomes a pre-release.
 
 Linux needs `libgtk-3-dev libxdo-dev libayatana-appindicator3-dev` for the tray.
 

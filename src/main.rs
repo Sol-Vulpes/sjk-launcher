@@ -1,0 +1,53 @@
+//! SJK Launcher: installs and updates Sol JK and JoF EternalJK from their
+//! GitHub releases, starts them, and fetches JoF content into SJK's JoF folder.
+//! `--minimized` starts it hidden in the tray, as the autostart entry does.
+
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod app;
+mod config;
+mod content;
+mod state;
+mod gamedata;
+mod games;
+mod github;
+mod install;
+mod system;
+
+use eframe::egui;
+use std::sync::Arc;
+
+fn main() -> eframe::Result {
+    let minimized = std::env::args().any(|arg| arg == system::MINIMIZED);
+    let mut config = config::Config::load();
+    if config.game_data.as_ref().is_none_or(|path| !gamedata::is_game_data(path)) {
+        config.game_data = gamedata::detect().or(config.game_data);
+        config.save();
+    }
+    // One separator throughout (Steam's library paths mix them).
+    config.game_data = config.game_data.map(|path| path.components().collect());
+
+    let icon = egui::IconData {
+        rgba: system::icon_rgba(64),
+        width: 64,
+        height: 64,
+    };
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_title("SJK Launcher")
+            .with_inner_size([980.0, 640.0])
+            .with_min_inner_size([760.0, 480.0])
+            .with_icon(Arc::new(icon))
+            .with_visible(!(minimized && cfg!(windows))),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "SJK Launcher",
+        options,
+        Box::new(move |cc| {
+            let core = state::Core::new(cc.egui_ctx.clone(), config);
+            core.start_checker();
+            Ok(Box::new(app::App::new(cc, core, minimized)))
+        }),
+    )
+}

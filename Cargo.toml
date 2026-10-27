@@ -1,0 +1,40 @@
+[workspace]
+members = [".", "sith-cloud"]
+
+[package]
+name = "sjk-launcher"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-2.0-only"
+description = "Installs, updates and starts SJK and JoF EternalJK, and fetches JoF content"
+
+[[bin]]
+name = "sjk-launcher"
+path = "src/main.rs"
+
+[dependencies]
+# SJK's own JoF content code: the same manifest, hosts, checks and folder as SJK's card.
+sjk-jof-content = { git = "https://github.com/Sol-Vulpes/SJK", tag = "sjk-v2026.1027.1" }
+eframe = { version = "0.32", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+tray-icon = "0.21"
+auto-launch = "0.5"
+rfd = "0.15"
+ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+flate2 = "1"
+tar = "0.4"
+directories = "6"
+raw-window-handle = "0.6"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+
+[profile.release]
+strip = true
+lto = "thin"

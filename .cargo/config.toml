@@ -1,0 +1,4 @@
+# One self-contained exe on Windows: no Visual C++ runtime to install (the VPS has none).
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]
+

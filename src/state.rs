@@ -40,6 +40,8 @@ pub struct Inner {
     /// The window, for showing it from the tray (Windows).
     pub hwnd: AtomicIsize,
     pub hidden: AtomicBool,
+    /// The tray asked for the SJK chat window.
+    pub open_chat: AtomicBool,
 }
 
 #[derive(Clone)]
@@ -64,6 +66,7 @@ impl Core {
             slots: Default::default(),
             hwnd: AtomicIsize::new(0),
             hidden: AtomicBool::new(false),
+            open_chat: AtomicBool::new(false),
         }))
     }
 

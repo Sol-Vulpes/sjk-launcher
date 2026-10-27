@@ -14,6 +14,15 @@ A small launcher for Jedi Academy that installs, updates and starts
 - **Sith cloud:** our own content server (`sith-cloud/`, on the VPS). Same manifest
   format and checks; its files go straight into `GameData/base` so SJK and EternalJK
   both load them. Only files the launcher downloaded from it are ever removed.
+- **SJK chat:** *Chat* in the header (or *SJK chat* in the tray) opens SJK's chat in a
+  window of its own, using SJK's `sjk-identity` crate. You are the same player as in
+  SJK: the launcher reads `GameData/SJK/identity.key`, `cl_hubUrl` and your `name` from
+  SJK's settings, and never makes or changes the key (start SJK once if you have
+  none). It follows SJK's chat switch and your muted players (`chat-mutes.txt`). It
+  reads the chat only while the window is open, and pauses while a game started from
+  the launcher runs, since the game reads it then. Messages go out as
+  `SJKLauncher/<version>`, which the hub marks `launcher` so SJK shows the launcher's
+  icon beside them.
 - **Tray and autostart:** closing the window keeps the launcher in the tray, and
   *Start with my computer* runs it hidden at login (`--minimized`). It checks GitHub
   every few hours and can install new versions by itself while the game is closed.

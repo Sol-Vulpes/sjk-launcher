@@ -22,33 +22,14 @@ pub fn set_autostart(on: bool) -> Result<(), String> {
     result.map_err(|error| error.to_string())
 }
 
-/// The launcher's icon: a gold saber hilt on a dark disc, drawn here so no image ships.
+/// The launcher's icon (`assets/launcher-icon.png`, from `scripts/launcher_icon.py`):
+/// a gold play mark in a gold ring on SJK's navy, `size` pixels square, RGBA.
 pub fn icon_rgba(size: u32) -> Vec<u8> {
-    let mut pixels = vec![0_u8; (size * size * 4) as usize];
-    let centre = size as f32 / 2.0;
-    for y in 0..size {
-        for x in 0..size {
-            let (fx, fy) = (x as f32 + 0.5 - centre, y as f32 + 0.5 - centre);
-            let radius = (fx * fx + fy * fy).sqrt() / centre;
-            // The blade runs corner to corner.
-            let along = (fx - fy) / std::f32::consts::SQRT_2;
-            let across = ((fx + fy) / std::f32::consts::SQRT_2).abs() / centre;
-            let index = ((y * size + x) * 4) as usize;
-            let colour: [u8; 4] = if radius > 1.0 {
-                [0, 0, 0, 0]
-            } else if across < 0.09 && along / centre > -0.15 && along / centre < 0.75 {
-                [255, 214, 120, 255]
-            } else if across < 0.14 && along / centre <= -0.15 && along / centre > -0.6 {
-                [150, 150, 160, 255]
-            } else if across < 0.2 && along / centre > 0.6 {
-                [255, 196, 64, 90]
-            } else {
-                [24, 22, 30, 255]
-            };
-            pixels[index..index + 4].copy_from_slice(&colour);
-        }
+    let png = include_bytes!("../assets/launcher-icon.png");
+    match image::load_from_memory_with_format(png, image::ImageFormat::Png) {
+        Ok(icon) => image::imageops::resize(&icon.to_rgba8(), size, size, image::imageops::FilterType::Lanczos3).into_raw(),
+        Err(_) => vec![0; (size * size * 4) as usize],
     }
-    pixels
 }
 
 pub struct Tray {
@@ -59,6 +40,7 @@ pub struct Tray {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrayAction {
     Show,
+    Chat,
     Play(crate::games::Game),
     Check,
     Quit,
@@ -70,12 +52,14 @@ impl Tray {
         use crate::games::Game;
         let menu = Menu::new();
         let open = MenuItem::new("Open launcher", true, None);
+        let chat = MenuItem::new("SJK chat", true, None);
         let play_sjk = MenuItem::new("Play Sol JK", true, None);
         let play_jof = MenuItem::new("Play JoF EternalJK", true, None);
         let check = MenuItem::new("Check for updates", true, None);
         let quit = MenuItem::new("Quit", true, None);
         menu.append_items(&[
             &open,
+            &chat,
             &PredefinedMenuItem::separator(),
             &play_sjk,
             &play_jof,
@@ -94,6 +78,7 @@ impl Tray {
             .map_err(|error| error.to_string())?;
         let actions: Vec<(MenuId, TrayAction)> = vec![
             (open.id().clone(), TrayAction::Show),
+            (chat.id().clone(), TrayAction::Chat),
             (play_sjk.id().clone(), TrayAction::Play(Game::Sjk)),
             (play_jof.id().clone(), TrayAction::Play(Game::Jof)),
             (check.id().clone(), TrayAction::Check),

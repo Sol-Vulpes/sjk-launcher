@@ -10,7 +10,8 @@ use crate::pk3scan::{Level, Location, Report};
 use crate::scans::{ScanState, Scanner};
 use crate::state::{Core, Standing};
 use crate::system::{self, Tray, TrayAction};
-use crate::theme::{self, EMBER, GOLD, GOLD_BRIGHT, HOLO, MUTED, WindowButton, display, strong};
+use crate::chat::Status as ChatStatus;
+use crate::theme::{self, EMBER, GOLD, GOLD_BRIGHT, HOLO, MUTED, SPACE, WindowButton, display, strong};
 use eframe::egui::{self, Color32, Rect, RichText, Sense, Vec2};
 use sjk_jof_content::job::{Job, Phase as ContentPhase, Settings};
 use sjk_jof_content::{Asset, AssetState, Group, Plan, Selection, human_size};
@@ -54,6 +55,13 @@ pub struct App {
     open_groups: HashSet<(usize, u32)>,
     pending: Option<Pending>,
     tooltip: String,
+    chat: crate::chat::Chat,
+    /// The SJK chat window is open.
+    chat_open: bool,
+    chat_draft: String,
+    /// Why the draft could not go, said under the field.
+    chat_error: Option<String>,
+    icon: Arc<egui::IconData>,
 }
 
 impl App {
@@ -87,6 +95,11 @@ impl App {
             open_groups: HashSet::new(),
             pending: None,
             tooltip: String::new(),
+            chat: crate::chat::Chat::new(cc.egui_ctx.clone()),
+            chat_open: false,
+            chat_draft: String::new(),
+            chat_error: None,
+            icon: Arc::new(egui::IconData { rgba: system::icon_rgba(64), width: 64, height: 64 }),
             core,
         };
         for collection in COLLECTIONS {
@@ -126,7 +139,11 @@ fn make_tray(core: &Core) -> Option<Tray> {
     let handler = {
         let core = core.clone();
         move |action: TrayAction| match action {
-            TrayAction::Show => {
+            TrayAction::Show | TrayAction::Chat => {
+                // The chat window lives with the main one, so both show.
+                if action == TrayAction::Chat {
+                    core.open_chat.store(true, Ordering::Relaxed);
+                }
                 core.hidden.store(false, Ordering::Relaxed);
                 system::show_window(core.hwnd.load(Ordering::Relaxed));
                 core.ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
@@ -189,6 +206,18 @@ impl eframe::App for App {
             self.tooltip = summary;
         }
         self.play_when_installed();
+        // Debug builds: SJK_LAUNCHER_TAB=chat draws the chat page in the main window
+        // (the one window a screenshot reaches), at the chat window's size.
+        #[cfg(debug_assertions)]
+        if std::env::var("SJK_LAUNCHER_TAB").as_deref() == Ok("chat") {
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(Vec2::new(460.0, 660.0)));
+            self.chat.set_active(true, false, self.core.game_data().map(|game_data| game_data.join("SJK")));
+            self.chat_page(ctx);
+            return debug_shot(ctx, &mut self.tab);
+        }
+        if self.core.open_chat.swap(false, Ordering::Relaxed) {
+            self.open_chat(ctx);
+        }
 
         let on_game = matches!(self.tab, Tab::Game(_));
         let screen = ctx.screen_rect();
@@ -222,6 +251,7 @@ impl eframe::App for App {
             });
         self.advance_pending(ctx);
         window_edges(ctx);
+        self.chat_window(ctx);
 
         let busy = GAMES.iter().any(|&game| self.core.slot(game).install.running()) || self.content.iter().any(Job::busy) || self.pending.is_some();
         ctx.request_repaint_after(std::time::Duration::from_millis(if busy { 100 } else { 1000 }));
@@ -368,6 +398,9 @@ impl App {
                 ui.spacing_mut().item_spacing.x = 36.0 * s;
                 if theme::tab(ui, "Settings", 17.0 * s, self.tab == Tab::Settings).clicked() {
                     self.tab = Tab::Settings;
+                }
+                if theme::tab(ui, "Chat", 17.0 * s, self.chat_open).on_hover_text("SJK chat, in its own window").clicked() {
+                    self.open_chat(&ctx);
                 }
                 if self.core.game_data().is_none() {
                     ui.label(RichText::new("Choose Jedi Academy's GameData in Settings").color(BAD));
@@ -1268,6 +1301,142 @@ impl App {
         });
     }
 
+    /// Open the SJK chat window, or bring it forward.
+    fn open_chat(&mut self, ctx: &egui::Context) {
+        if self.chat_open {
+            ctx.send_viewport_cmd_to(chat_viewport(), egui::ViewportCommand::Focus);
+        }
+        self.chat_open = true;
+    }
+
+    /// SJK chat in a window of its own, beside the launcher's. It reads the hub only
+    /// while open, and not while a game started from here runs (the game reads it).
+    fn chat_window(&mut self, ctx: &egui::Context) {
+        let playing = GAMES.iter().any(|&game| self.core.running(game));
+        let folder = self.core.game_data().map(|game_data| game_data.join("SJK"));
+        self.chat.set_active(self.chat_open, playing, folder);
+        if !self.chat_open {
+            return;
+        }
+        let builder = egui::ViewportBuilder::default()
+            .with_title("SJK chat")
+            .with_inner_size([460.0, 660.0])
+            .with_min_inner_size([360.0, 420.0])
+            .with_icon(Arc::clone(&self.icon))
+            .with_decorations(false);
+        ctx.show_viewport_immediate(chat_viewport(), builder, |ctx, _| {
+            if ctx.input(|input| input.viewport().close_requested()) {
+                self.chat_open = false;
+            }
+            self.chat_page(ctx);
+            window_edges(ctx);
+        });
+    }
+
+    fn chat_page(&mut self, ctx: &egui::Context) {
+        let view = self.chat.view();
+        let (status, lines, online, own, sending, refused) =
+            (view.status.clone(), view.lines.clone(), view.online, view.own_key.clone(), view.sending, view.refused.clone());
+        drop(view);
+        let live = status == ChatStatus::Live;
+
+        egui::TopBottomPanel::top("chat-bar")
+            .frame(egui::Frame::NONE.fill(SPACE).inner_margin(egui::Margin { left: 22, right: 12, top: 12, bottom: 10 }))
+            .show_separator_line(false)
+            .show(ctx, |ui| {
+                let bar = Rect::from_min_max(ctx.screen_rect().min, egui::pos2(ctx.screen_rect().right(), ui.max_rect().top() + 40.0));
+                let bar = ui.interact(bar, egui::Id::new("chat-title-bar"), Sense::click_and_drag());
+                if bar.drag_started_by(egui::PointerButton::Primary) {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                }
+                ui.horizontal(|ui| {
+                    ui.set_min_height(32.0);
+                    ui.label(display("SJK chat", 24.0).color(theme::TEXT));
+                    if live {
+                        ui.label(RichText::new(format!("{online} online")).color(DIM));
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        if theme::window_button(ui, WindowButton::Close, 32.0).clicked() {
+                            self.chat_open = false;
+                        }
+                        if theme::window_button(ui, WindowButton::Minimise, 32.0).clicked() {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                        }
+                    });
+                });
+            });
+
+        egui::TopBottomPanel::bottom("chat-field")
+            .frame(egui::Frame::NONE.fill(SPACE).inner_margin(egui::Margin { left: 22, right: 22, top: 0, bottom: 18 }))
+            .show_separator_line(false)
+            .show(ctx, |ui| {
+                theme::rule(ui);
+                ui.add_space(12.0);
+                let said = self.chat_error.clone().or(refused);
+                if let Some(why) = said {
+                    ui.label(RichText::new(why).color(BAD));
+                    ui.add_space(4.0);
+                }
+                let mut send = false;
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let ready = live && !sending && !self.chat_draft.trim().is_empty();
+                        send |= theme::main_button(ui, if sending { "Sending" } else { "Send" }, Vec2::new(86.0, 38.0), ready).clicked();
+                        let count = self.chat_draft.chars().count();
+                        let colour = if count > sjk_identity::chat::TEXT_MAX { BAD } else { DIM };
+                        ui.label(RichText::new(format!("{count}/{}", sjk_identity::chat::TEXT_MAX)).size(13.0).color(colour));
+                        let field = ui.add_enabled(
+                            live,
+                            egui::TextEdit::singleline(&mut self.chat_draft)
+                                .hint_text("Message SJK chat")
+                                .desired_width(f32::INFINITY)
+                                .margin(Vec2::new(10.0, 9.0)),
+                        );
+                        if field.changed() {
+                            self.chat_error = None;
+                        }
+                        if field.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) {
+                            send = true;
+                            field.request_focus();
+                        }
+                    });
+                });
+                if send && !sending {
+                    match self.chat.send(&self.chat_draft) {
+                        Ok(()) => self.chat_draft.clear(),
+                        Err(why) => self.chat_error = Some(why),
+                    }
+                }
+            });
+
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(SPACE).inner_margin(egui::Margin { left: 22, right: 22, top: 4, bottom: 8 }))
+            .show(ctx, |ui| {
+                let note = match &status {
+                    ChatStatus::Idle | ChatStatus::Connecting => Some(("Connecting to SJK chat…".to_owned(), DIM)),
+                    ChatStatus::Paused => Some(("Paused while you play: SJK chat is in the game".to_owned(), DIM)),
+                    ChatStatus::Unavailable(why) => Some((why.clone(), BAD)),
+                    ChatStatus::Failing(why) => Some((format!("{why}, trying again"), BAD)),
+                    ChatStatus::Live => None,
+                };
+                if let Some((text, colour)) = note {
+                    ui.label(RichText::new(text).color(colour));
+                    ui.add_space(8.0);
+                }
+                if live && lines.is_empty() {
+                    ui.label(RichText::new("Nothing said yet.").color(DIM));
+                }
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |since| since.as_secs() as i64);
+                egui::ScrollArea::vertical().auto_shrink(false).stick_to_bottom(true).show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 10.0;
+                    for line in &lines {
+                        chat_line(ui, line, line.key_id == own, now);
+                    }
+                });
+            });
+    }
+
     fn settings(&mut self, ui: &mut egui::Ui) {
         ui.add_space(8.0);
         ui.heading("Game folder");
@@ -1376,6 +1545,80 @@ fn legend(ui: &mut egui::Ui) {
         RichText::new(meaning).size(13.0).color(DIM).append_to(&mut job, &style, egui::FontSelection::Default, egui::Align::Center);
         ui.add(egui::Label::new(job).wrap());
     }
+}
+
+fn chat_viewport() -> egui::ViewportId {
+    egui::ViewportId::from_hash_of("sjk-chat")
+}
+
+/// One message as SJK's chat page lays it out: the name in its colours, the verified
+/// tick, the text in the SJK chat's gold flowing after it; Staff and the time on the
+/// right of its first row.
+fn chat_line(ui: &mut egui::Ui, line: &crate::chat::Line, own: bool, now: i64) {
+    use egui::text::{LayoutJob, TextFormat};
+    let body = egui::FontId::proportional(15.0);
+    let strong = egui::FontId::new(15.0, egui::FontFamily::Name("body-strong".into()));
+    let mut job = LayoutJob::default();
+    for (text, colour) in coloured(&line.name) {
+        job.append(&text, 0.0, TextFormat::simple(strong.clone(), colour));
+    }
+    if line.verified {
+        job.append(" ✔", 0.0, TextFormat::simple(body.clone(), GOLD_BRIGHT));
+    }
+    job.append(": ", 0.0, TextFormat::simple(body.clone(), DIM));
+    job.append(&line.text, 0.0, TextFormat::simple(body, crate::chat::GOLD));
+    let lit = ui.painter().add(egui::Shape::Noop);
+    let row = ui.horizontal_top(|ui| {
+        let side = 96.0;
+        let width = (ui.available_width() - side).max(120.0);
+        ui.allocate_ui_with_layout(Vec2::new(width, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+            ui.set_width(width);
+            ui.add(egui::Label::new(job).wrap());
+        });
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+            ui.label(RichText::new(crate::chat::ago(line.at, now)).size(12.5).color(DIM));
+            if line.staff {
+                ui.label(RichText::new("Staff").size(12.5).color(HOLO));
+            }
+        });
+    });
+    // The player's own lines carry a thin gold mark at their left.
+    if own {
+        let rect = row.response.rect;
+        let mark = Rect::from_min_max(egui::pos2(rect.left() - 10.0, rect.top() + 2.0), egui::pos2(rect.left() - 8.0, rect.bottom() - 2.0));
+        ui.painter().set(lit, egui::Shape::rect_filled(mark, 1.0, GOLD));
+    }
+}
+
+/// A name's runs in Jedi Academy's colours (`^0` to `^9`), as SJK lifts them to read
+/// on its dark ground; white before any code.
+fn coloured(name: &str) -> Vec<(String, Color32)> {
+    const PALETTE: [Color32; 10] = [
+        Color32::from_rgb(0x8A, 0x8F, 0x99),
+        Color32::from_rgb(0xFF, 0x5C, 0x5C),
+        Color32::from_rgb(0x6B, 0xE3, 0x6B),
+        Color32::from_rgb(0xFF, 0xE1, 0x5A),
+        Color32::from_rgb(0x70, 0x8C, 0xFF),
+        Color32::from_rgb(0x5A, 0xE6, 0xE6),
+        Color32::from_rgb(0xE6, 0x6B, 0xE6),
+        Color32::from_rgb(0xF2, 0xF4, 0xF8),
+        Color32::from_rgb(0xFF, 0x9A, 0x3D),
+        Color32::from_rgb(0xA6, 0xA6, 0xA6),
+    ];
+    let mut runs: Vec<(String, Color32)> = vec![(String::new(), PALETTE[7])];
+    let mut chars = name.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '^'
+            && let Some(digit) = chars.peek().and_then(|next| next.to_digit(10))
+        {
+            chars.next();
+            runs.push((String::new(), PALETTE[digit as usize]));
+        } else if let Some((text, _)) = runs.last_mut() {
+            text.push(c);
+        }
+    }
+    runs.retain(|(text, _)| !text.is_empty());
+    runs
 }
 
 /// A fixed-width column in a right-to-left row.

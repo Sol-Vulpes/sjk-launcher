@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 # SJK's own JoF content code: the same manifest, hosts, checks and folder as SJK's card.
 sjk-jof-content = { git = "https://github.com/Sol-Vulpes/SJK", tag = "sjk-v2026.1027.1" }
+sjk-identity = { git = "https://github.com/Sol-Vulpes/SJK", tag = "sjk-v2026.1027.1" }
 eframe = { version = "0.32", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 tray-icon = "0.21"
 auto-launch = "0.5"

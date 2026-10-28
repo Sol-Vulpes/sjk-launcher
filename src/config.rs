@@ -27,7 +27,8 @@ pub struct Config {
     /// `jof.contentGroups` and `jof.contentFiles`.
     pub jof_groups: String,
     pub jof_files: String,
-    /// The Sith cloud server (`sith-cloud`), and the picks made from it.
+    /// Another Sith cloud server (`sith-cloud`) set by hand; empty uses the one the SJK
+    /// hub names. And the picks made from it.
     pub sith_url: String,
     pub sith_groups: String,
     pub sith_files: String,
@@ -35,7 +36,9 @@ pub struct Config {
     pub trusted: std::collections::BTreeSet<String>,
 }
 
-pub const SITH_URL: &str = "http://64.177.112.251:8080";
+/// The server written in as the default before the hub named it; a saved config holding
+/// it asks the hub instead.
+const OLD_SITH_URL: &str = "http://64.177.112.251:8080";
 
 impl Default for Config {
     fn default() -> Self {
@@ -49,7 +52,7 @@ impl Default for Config {
             check_hours: 3,
             jof_groups: sjk_jof_content::plan::DEFAULT.into(),
             jof_files: String::new(),
-            sith_url: SITH_URL.into(),
+            sith_url: String::new(),
             sith_groups: sjk_jof_content::plan::DEFAULT.into(),
             sith_files: String::new(),
             trusted: Default::default(),
@@ -69,7 +72,13 @@ impl Config {
     pub fn load() -> Self {
         file()
             .and_then(|path| std::fs::read(path).ok())
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .and_then(|bytes| serde_json::from_slice::<Self>(&bytes).ok())
+            .map(|mut config| {
+                if config.sith_url.trim_end_matches('/') == OLD_SITH_URL {
+                    config.sith_url.clear();
+                }
+                config
+            })
             .unwrap_or_default()
     }
 

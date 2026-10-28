@@ -858,7 +858,7 @@ impl App {
         theme::rule(ui);
         let Some(snapshot) = progress.snapshot else { return };
 
-        let mut changed = false;
+        let mut changed = collection == Collection::Sith && self.extras_row(ui, &snapshot);
         egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             ui.add_space(6.0);
             if snapshot.manifest.groups.is_empty() {
@@ -927,6 +927,45 @@ impl App {
         if changed {
             self.save_selection(collection);
         }
+    }
+
+    /// The Sith cloud's extras pack on a switch of its own, above the groups, while
+    /// the cloud offers it. Returns whether the choice changed.
+    fn extras_row(&mut self, ui: &mut egui::Ui, snapshot: &sjk_jof_content::Snapshot) -> bool {
+        let Some((group_index, asset_index)) = crate::content::extras(&snapshot.manifest) else { return false };
+        let group = &snapshot.manifest.groups[group_index];
+        let asset = &group.assets[asset_index];
+        let state = snapshot.state(group_index, asset_index);
+        let selection = &mut self.selections[Collection::Sith as usize];
+        let mut wants = selection.wants(group, asset);
+        let mut changed = false;
+        ui.add_space(8.0);
+        egui::Frame::NONE.fill(theme::RAISED).inner_margin(egui::Margin::symmetric(16, 12)).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.set_min_height(40.0);
+                if ui.checkbox(&mut wants, "").changed() {
+                    selection.toggle_file(group, asset);
+                    changed = true;
+                }
+                ui.vertical(|ui| {
+                    ui.label(display("SJK extras pack", 19.0));
+                    ui.label(RichText::new("Unofficial emotes, skins and sounds, in one file.").color(DIM));
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(RichText::new(human_size(asset.size)).color(DIM));
+                    let (text, colour) = match (state, wants) {
+                        (AssetState::Installed, true) => ("Here", DIM),
+                        (AssetState::Installed | AssetState::Outdated, false) => ("To remove", GOLD_BRIGHT),
+                        (AssetState::InGameFolder, _) => ("In game folder", DIM),
+                        (AssetState::Outdated, true) => ("To update", GOLD_BRIGHT),
+                        (AssetState::Missing, true) => ("To download", GOLD_BRIGHT),
+                        _ => ("Off", DIM),
+                    };
+                    ui.label(RichText::new(text).color(colour));
+                });
+            });
+        });
+        changed
     }
 
     /// One file under its group: choice, name, scan, state, size, Inspect.
@@ -1478,9 +1517,13 @@ impl App {
         ui.heading("Sith cloud");
         ui.horizontal(|ui| {
             ui.label("Server");
-            ui.add(egui::TextEdit::singleline(&mut config.sith_url).desired_width(320.0));
+            ui.add(
+                egui::TextEdit::singleline(&mut config.sith_url)
+                    .hint_text("the one the SJK hub names")
+                    .desired_width(320.0),
+            );
             if ui.small_button("Default").clicked() {
-                config.sith_url = crate::config::SITH_URL.into();
+                config.sith_url.clear();
             }
         });
 

@@ -286,6 +286,13 @@ fn send_loop(inbox: &Receiver<String>, view: &Mutex<View>, session: &Mutex<Optio
     }
 }
 
+/// SJK's hub address from its settings folder: `cl_hubUrl`, SJK's default when it is
+/// not set, empty when the player set none.
+pub fn hub_url(folder: &Path) -> String {
+    let config = std::fs::read_to_string(folder.join("config.cfg")).unwrap_or_default();
+    setting(&config, "cl_hubUrl").unwrap_or_else(|| DEFAULT_HUB.to_owned())
+}
+
 impl Session {
     fn read(folder: &Path) -> Result<Self, String> {
         let config = std::fs::read_to_string(folder.join("config.cfg")).unwrap_or_default();

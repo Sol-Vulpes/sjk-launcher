@@ -20,6 +20,18 @@ pub enum Collection {
 
 pub const COLLECTIONS: [Collection; 2] = [Collection::Jof, Collection::Sith];
 
+/// The Sith cloud's optional pack of unofficial extras (emotes, skins, sounds),
+/// offered on its own switch above the groups.
+pub const EXTRAS_FILE: &str = "unofficial_sjk_extras.pk3";
+
+/// Where the extras pack is in a manifest: its group and file indices.
+pub fn extras(manifest: &sjk_jof_content::Manifest) -> Option<(usize, usize)> {
+    manifest.groups.iter().enumerate().find_map(|(group_index, group)| {
+        let asset = group.assets.iter().position(|asset| asset.name.eq_ignore_ascii_case(EXTRAS_FILE))?;
+        Some((group_index, asset))
+    })
+}
+
 impl Collection {
     pub fn name(self) -> &'static str {
         match self {
@@ -45,23 +57,30 @@ impl Collection {
     pub fn settings(self, config: &Config, game_data: &Path) -> Settings {
         let version = format!("launcher-{}", env!("CARGO_PKG_VERSION"));
         match self {
+            // The hub names the hosts; the built-in ones are for when it can't be asked.
             Self::Jof => Settings {
                 root: game_data.join("SJK").join("jof"),
                 game_base: Some(game_data.join("base")),
                 sources: sjk_jof_content::source::SOURCES.to_vec(),
+                directory: Some(directory(game_data, "jof")),
                 version,
             },
-            // The root is GameData itself, so its `base` is the game's.
-            Self::Sith => Settings {
-                root: game_data.to_owned(),
-                game_base: None,
-                sources: vec![Source {
-                    name: "sith",
-                    manifest: leak(&format!("{}/manifest.json", config.sith_url.trim_end_matches('/'))),
-                    files: leak(&format!("{}/repository", config.sith_url.trim_end_matches('/'))),
-                }],
-                version,
-            },
+            // The root is GameData itself, so its `base` is the game's. Only the hub
+            // knows the server, unless one was set by hand.
+            Self::Sith => {
+                let url = config.sith_url.trim().trim_end_matches('/');
+                let (sources, directory) = if url.is_empty() {
+                    (Vec::new(), Some(directory(game_data, "sith")))
+                } else {
+                    let source = Source {
+                        name: "sith",
+                        manifest: leak(&format!("{url}/manifest.json")),
+                        files: leak(&format!("{url}/repository")),
+                    };
+                    (vec![source], None)
+                };
+                Settings { root: game_data.to_owned(), game_base: None, sources, directory, version }
+            }
         }
     }
 
@@ -81,6 +100,12 @@ impl Collection {
         *groups = selection.saved();
         *files = selection.saved_files();
     }
+}
+
+/// Ask SJK's hub (`cl_hubUrl` in SJK's settings) where `collection` is, so SJK can
+/// move it or switch it off for everyone without a new launcher.
+fn directory(game_data: &Path, collection: &'static str) -> sjk_jof_content::Directory {
+    sjk_jof_content::Directory { hub: crate::chat::hub_url(&game_data.join("SJK")), collection, only: None }
 }
 
 /// The crate takes static addresses; one per refresh is a few bytes for the run.

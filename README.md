@@ -13,7 +13,10 @@ A small launcher for Jedi Academy that installs, updates and starts
   JoF's launcher already put in `GameData/base` are recognised and not fetched again.
 - **Sith cloud:** our own content server (`sith-cloud/`, on the VPS). Same manifest
   format and checks; its files go straight into `GameData/base` so SJK and EternalJK
-  both load them. Only files the launcher downloaded from it are ever removed.
+  both load them. Only files the launcher downloaded from it are ever removed. The
+  optional SJK extras pack (`unofficial_sjk_extras.pk3`, in the `extras` group) also
+  has a switch of its own at the top of the tab. SJK itself has the same server on its
+  Sith cloud card (`sith.downloads`), sharing the launcher's record of what it fetched.
 - **SJK chat:** *Chat* in the header (or *SJK chat* in the tray) opens SJK's chat in a
   window of its own, using SJK's `sjk-identity` crate. You are the same player as in
   SJK: the launcher reads `GameData/SJK/identity.key`, `cl_hubUrl` and your `name` from
@@ -60,7 +63,11 @@ C:\ProgramData\SithCloud\
   groups.json           names, descriptions and types (REQUIRED/RECOMMENDED/OPTIONAL) per folder
   repository\maps\      one folder per group, PK3s inside
   repository\skins\
+  repository\extras\    unofficial_sjk_extras.pk3 (OPTIONAL)
 ```
+
+Upload a big PK3 under another name outside `repository` first and move it in once
+it's whole, so the server never lists a half-copied file.
 
 Add or replace PK3s with scp; the server picks them up within 10 seconds:
 

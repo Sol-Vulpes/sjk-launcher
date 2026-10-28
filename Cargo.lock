@@ -3479,7 +3479,7 @@ dependencies = [
 [[package]]
 name = "sjk-identity"
 version = "0.1.0"
-source = "git+https://github.com/Sol-Vulpes/SJK?rev=f991d629#f991d629c36fc77580b4d5b0e66cd747116e9d4e"
+source = "git+https://github.com/Sol-Vulpes/SJK?tag=sjk-v2026.1028.1#61f220087da96734c40fed7f38a27d912619dd1e"
 dependencies = [
  "base64",
  "chacha20poly1305",
@@ -3508,7 +3508,7 @@ dependencies = [
 [[package]]
 name = "sjk-jof-content"
 version = "0.1.0"
-source = "git+https://github.com/Sol-Vulpes/SJK?rev=f991d629#f991d629c36fc77580b4d5b0e66cd747116e9d4e"
+source = "git+https://github.com/Sol-Vulpes/SJK?tag=sjk-v2026.1028.1#61f220087da96734c40fed7f38a27d912619dd1e"
 dependencies = [
  "md-5",
  "serde",
@@ -3532,7 +3532,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sjk-identity",
- "sjk-jof-content 0.1.0 (git+https://github.com/Sol-Vulpes/SJK?rev=f991d629)",
+ "sjk-jof-content 0.1.0 (git+https://github.com/Sol-Vulpes/SJK?tag=sjk-v2026.1028.1)",
  "tar",
  "tray-icon",
  "ureq",

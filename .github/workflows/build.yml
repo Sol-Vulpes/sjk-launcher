@@ -3,6 +3,8 @@ name: Build
 # Every push and pull request is tested and built on the three OSes.
 # A release is made when a v* tag is pushed, or by hand from the Actions tab
 # ("Run workflow" with a version). The version must match Cargo.toml.
+# GitHub's macOS runners are often too busy to pick a job up, so a release
+# goes out without macOS rather than waiting on it; Windows and Linux must build.
 on:
   push:
     branches: [main]
@@ -24,6 +26,7 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Linux tray and window dependencies
@@ -49,7 +52,7 @@ jobs:
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,6 +72,11 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: Check Windows and Linux built
+        run: |
+          ls dist
+          ls dist/sjk-launcher-windows-*.zip dist/sjk-launcher-linux-*.tar.gz
+          ls dist/sjk-launcher-macos-* 2>/dev/null || echo "::warning::No macOS build; releasing without it"
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

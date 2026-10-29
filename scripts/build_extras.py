@@ -19,7 +19,9 @@ SOURCES = [
     "skinpack.pk3",
     "zz_solfox_voice_local.pk3",
     "zz_sjk_box_sounds_local.pk3",
-    # The mystery box's laugh when a box blows up (sound/sjk/mystery_box/laugh.mp3).
+    # The mystery box's laugh when a box blows up (sound/sjk/mystery_box/laugh.mp3), and
+    # since 30/10/2026 its opening, roll and closing (extras_open, extras_roll and
+    # extras_close.mp3 there).
     "zz_sjk_mystery_box_sounds_local.pk3",
 ]
 DROP_PREFIXES = ("models/players/emote_rig/",)

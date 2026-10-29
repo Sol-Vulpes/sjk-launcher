@@ -1,4 +1,4 @@
-"""Builds unofficial_sjk_extras.pk3 from five pk3s in GameData/base.
+"""Builds unofficial_sjk_extras.pk3 from six pk3s in GameData/base.
 
 Usage: python -I build_extras.py <GameData/base> <out.pk3>
 
@@ -19,6 +19,8 @@ SOURCES = [
     "skinpack.pk3",
     "zz_solfox_voice_local.pk3",
     "zz_sjk_box_sounds_local.pk3",
+    # The mystery box's laugh when a box blows up (sound/sjk/mystery_box/laugh.mp3).
+    "zz_sjk_mystery_box_sounds_local.pk3",
 ]
 DROP_PREFIXES = ("models/players/emote_rig/",)
 DROP = {"sound/emotes/comrade.mp3"}
